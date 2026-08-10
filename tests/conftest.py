@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
-from src.data.storage import create_tables, get_engine, ohlcv_table
+from src.data.storage import create_tables, get_engine, ohlcv_table, options_chain_table
 
 
 @pytest.fixture(scope="session")
@@ -19,7 +19,8 @@ def db_engine():
 
 @pytest.fixture()
 def engine(db_engine):
-    """A DB engine with the ohlcv table truncated before each test."""
+    """A DB engine with the data tables truncated before each test."""
+    tables = ", ".join([ohlcv_table.name, options_chain_table.name])
     with db_engine.begin() as conn:
-        conn.execute(text(f"TRUNCATE TABLE {ohlcv_table.name}"))
+        conn.execute(text(f"TRUNCATE TABLE {tables}"))
     return db_engine
