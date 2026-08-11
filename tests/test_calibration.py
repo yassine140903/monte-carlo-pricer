@@ -9,7 +9,7 @@ import pytest
 from src.calibration.base import CalibratorBase
 from src.calibration.gbm import GBMCalibrator, GBMParams
 from src.calibration.heston import HestonCalibrator, feller_condition_satisfied
-from src.calibration.jump_diffusion import JumpDiffusionCalibrator
+from src.calibration.jump_diffusion import JumpDiffusionCalibrator, JumpDiffusionParams
 from src.calibration.utils import (
     TRADING_DAYS_PER_YEAR,
     annualize_mean,
@@ -17,6 +17,7 @@ from src.calibration.utils import (
     log_returns,
     rolling_volatility,
 )
+from src.simulation.jump_diffusion import JumpDiffusionSimulator
 
 DT = 1 / 252
 
@@ -177,6 +178,103 @@ class TestJumpDiffusionCalibrator:
         cal = JumpDiffusionCalibrator()
         params = cal.calibrate(prices, DT)
         assert params.lambda_j >= 0
+
+    def test_recovers_gbm_drift_when_no_jumps(self):
+        """Both calibrators report mu in the price-level convention, so on
+        jump-free data they must agree. Fitting the log-return drift and
+        reporting it as mu would leave JD low by sigma**2/2 (~2%/yr here).
+        """
+        mu_true, sigma_true = 0.10, 0.20
+        prices = _simulate_gbm_prices(mu_true, sigma_true, n_days=252 * 20, seed=21)
+
+        gbm_params = GBMCalibrator().calibrate(prices, DT)
+        jd_params = JumpDiffusionCalibrator().calibrate(prices, DT)
+
+        assert jd_params.mu == pytest.approx(gbm_params.mu, rel=0.05)
+        assert jd_params.mu == pytest.approx(mu_true, rel=0.25)
+        # the gap must be far smaller than the correction itself
+        assert abs(jd_params.mu - gbm_params.mu) < 0.25 * (0.5 * sigma_true**2)
+
+    def test_mu_is_price_level_drift_not_log_drift(self):
+        """Pins the convention directly against the sample.
+
+        The likelihood fits the diffusion drift alpha in log space, and the
+        mixture splits the observed log-return mean between that drift and the
+        jumps: mean(returns)/dt == alpha + lambda_j * mu_j. Recovering alpha
+        from the reported mu means undoing both the Ito correction and the
+        jump compensator.
+        """
+        prices = _simulate_gbm_prices(0.10, 0.20, n_days=252 * 20, seed=22)
+        params = JumpDiffusionCalibrator().calibrate(prices, DT)
+
+        k = np.expm1(params.mu_j + 0.5 * params.sigma_j**2)
+        alpha = params.mu - 0.5 * params.sigma**2 - params.lambda_j * k
+        mu_log_sample = float(np.mean(log_returns(prices))) / DT
+
+        assert alpha + params.lambda_j * params.mu_j == pytest.approx(
+            mu_log_sample, abs=1e-3
+        )
+
+        # independent of the algebra above: mu is a price-level drift, so it
+        # should track the mean *simple* return, not the mean log return
+        simple_returns = np.diff(prices) / prices[:-1]
+        assert params.mu == pytest.approx(float(np.mean(simple_returns)) / DT, abs=0.01)
+        assert abs(params.mu - mu_log_sample) > 0.5 * (0.5 * params.sigma**2)
+
+    def test_round_trip_recovers_mu_on_jumpy_data(self):
+        """Simulate with known params, calibrate back, compare mu.
+
+        Jump activity is deliberately heavy (lambda_j=2/yr, mu_j=-5%) so the
+        compensator lambda_j*k is about -0.095 — roughly five times the Ito
+        term. Dropping either correction moves the recovered mu far outside
+        the tolerance below.
+
+        A single 20y path pins the drift only to about sigma/sqrt(T) = 4.5%,
+        so 20 independent paths are calibrated and averaged.
+        """
+        true_params = JumpDiffusionParams(
+            mu=0.10, sigma=0.20, lambda_j=2.0, mu_j=-0.05, sigma_j=0.05
+        )
+        n_paths, years = 20, 20.0
+
+        paths = JumpDiffusionSimulator().simulate(
+            100.0, true_params, T=years, dt=DT, n_simulations=n_paths, seed=2024
+        )
+        recovered = [JumpDiffusionCalibrator().calibrate(path, DT) for path in paths]
+
+        mus = np.array([p.mu for p in recovered])
+        stderr = mus.std(ddof=1) / np.sqrt(n_paths)
+        assert mus.mean() == pytest.approx(true_params.mu, abs=max(4 * stderr, 0.02))
+
+        # the other params must come back too, or the mu agreement above could
+        # be a cancellation of two offsetting errors
+        assert np.mean([p.sigma for p in recovered]) == pytest.approx(
+            true_params.sigma, rel=0.05
+        )
+        assert np.mean([p.lambda_j for p in recovered]) == pytest.approx(
+            true_params.lambda_j, rel=0.25
+        )
+        assert np.mean([p.mu_j for p in recovered]) == pytest.approx(
+            true_params.mu_j, rel=0.30
+        )
+
+    def test_round_trip_fails_without_the_jump_compensator(self):
+        """The guard the previous test needs to be meaningful: strip the
+        lambda_j*k term back off and mu must land visibly wrong, so the round
+        trip cannot pass by accident under the old convention.
+        """
+        true_params = JumpDiffusionParams(
+            mu=0.10, sigma=0.20, lambda_j=2.0, mu_j=-0.05, sigma_j=0.05
+        )
+        paths = JumpDiffusionSimulator().simulate(
+            100.0, true_params, T=20.0, dt=DT, n_simulations=20, seed=2024
+        )
+        recovered = [JumpDiffusionCalibrator().calibrate(path, DT) for path in paths]
+
+        without_compensator = np.array(
+            [p.mu - p.lambda_j * np.expm1(p.mu_j + 0.5 * p.sigma_j**2) for p in recovered]
+        )
+        assert abs(without_compensator.mean() - true_params.mu) > 0.05
 
     def test_stores_state_on_self(self):
         prices = _simulate_gbm_prices(0.05, 0.2, n_days=252 * 3, seed=12)
