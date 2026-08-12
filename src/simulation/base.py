@@ -38,6 +38,11 @@ class SimulatorBase(ABC):
             seed: Seed for this call's Generator; None draws from OS entropy.
             variance_reduction: "antithetic", "stratified" or None.
 
+        Subclasses also accept a ``mu`` keyword that overrides the drift
+        carried in ``params`` (HestonParams has none, so there it is simply
+        the drift, defaulting to 0). Pricing code passes r - q to switch from
+        the calibrated real-world measure to the risk-neutral one.
+
         Returns:
             Array of shape (n_simulations, n_steps+1) where
             n_steps = round(T / dt). Column 0 is S0 for every path.

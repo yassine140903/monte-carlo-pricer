@@ -32,7 +32,12 @@ class JumpDiffusionSimulator(SimulatorBase):
         n_simulations: int,
         seed: int | None = None,
         variance_reduction: str | None = None,
+        mu: float | None = None,
     ) -> np.ndarray:
+        """``mu`` overrides ``params.mu`` when given — pricing passes r - q,
+        which the compensator below turns into the risk-neutral drift
+        r - q - lambda_j * k for the diffusion part.
+        """
         self._validate_inputs(S0, n_simulations)
         n_steps = resolve_n_steps(T, dt)
         self._validate_jump_intensity(params.lambda_j, dt)
@@ -44,7 +49,8 @@ class JumpDiffusionSimulator(SimulatorBase):
         # Expected proportional jump size E[e^J - 1] for J ~ N(mu_j, sigma_j**2).
         k = np.expm1(params.mu_j + 0.5 * params.sigma_j**2)
 
-        drift = (params.mu - params.lambda_j * k - 0.5 * params.sigma**2) * dt
+        effective_mu = mu if mu is not None else params.mu
+        drift = (effective_mu - params.lambda_j * k - 0.5 * params.sigma**2) * dt
         diffusion = params.sigma * np.sqrt(dt) * z
 
         # Variance reduction deliberately does not extend to the jump draws:
