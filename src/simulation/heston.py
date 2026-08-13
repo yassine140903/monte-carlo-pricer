@@ -52,6 +52,7 @@ class HestonSimulator(SimulatorBase):
         seed: int | None = None,
         variance_reduction: str | None = None,
         mu: float = 0.0,
+        z_extern: np.ndarray | None = None,
     ) -> np.ndarray:
         """Price paths of shape (n_simulations, n_steps+1).
 
@@ -61,7 +62,7 @@ class HestonSimulator(SimulatorBase):
         pass the risk-free rate (less any dividend yield).
         """
         prices, _ = self.simulate_with_variance(
-            S0, params, T, dt, n_simulations, seed, variance_reduction, mu
+            S0, params, T, dt, n_simulations, seed, variance_reduction, mu, z_extern
         )
         return prices
 
@@ -75,6 +76,7 @@ class HestonSimulator(SimulatorBase):
         seed: int | None = None,
         variance_reduction: str | None = None,
         mu: float = 0.0,
+        z_extern: np.ndarray | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Both the price paths and the variance paths that produced them.
 
@@ -82,19 +84,36 @@ class HestonSimulator(SimulatorBase):
         (same shape, column 0 is v0) for callers that need the volatility
         state itself — variance derivatives, diagnostics, or asserting
         non-negativity.
+
+        ``z_extern`` replaces the price normals only. The variance process
+        keeps drawing from ``seed``'s Generator, so both arguments stay
+        meaningful at once — see JumpDiffusionSimulator for the same split.
         """
         self._validate_inputs(S0, n_simulations)
         self._validate_params(params)
         n_steps = resolve_n_steps(T, dt)
+        self._validate_z_extern(z_extern, variance_reduction, n_simulations, n_steps)
         rng = make_rng(seed)
 
-        # One draw block per step for the variance, one for the price. Drawing
-        # them together means variance reduction applies to both: negating a
-        # normal maps its uniform u to 1 - u, which is the antithetic pair for
-        # the inverse-transform draws the variance step uses.
-        samples = generate_samples(rng, (n_simulations, 2 * n_steps), variance_reduction)
-        variance_uniforms = np.clip(norm.cdf(samples[:, :n_steps]), _EPS, 1.0 - _EPS)
-        price_normals = samples[:, n_steps:]
+        if z_extern is not None:
+            # Only the variance process is still ours to draw. It consumes one
+            # block instead of two, so its draws differ from the branch below
+            # at the same seed — z_extern is a different simulation, not a
+            # re-labelling of one.
+            variance_normals = generate_samples(rng, (n_simulations, n_steps), None)
+            variance_uniforms = np.clip(norm.cdf(variance_normals), _EPS, 1.0 - _EPS)
+            price_normals = z_extern
+        else:
+            # One draw block per step for the variance, one for the price.
+            # Drawing them together means variance reduction applies to both:
+            # negating a normal maps its uniform u to 1 - u, which is the
+            # antithetic pair for the inverse-transform draws the variance
+            # step uses.
+            samples = generate_samples(
+                rng, (n_simulations, 2 * n_steps), variance_reduction
+            )
+            variance_uniforms = np.clip(norm.cdf(samples[:, :n_steps]), _EPS, 1.0 - _EPS)
+            price_normals = samples[:, n_steps:]
 
         variance_paths = np.empty((n_simulations, n_steps + 1))
         log_increments = np.empty((n_simulations, n_steps))

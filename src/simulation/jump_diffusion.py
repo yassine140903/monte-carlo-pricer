@@ -33,18 +33,28 @@ class JumpDiffusionSimulator(SimulatorBase):
         seed: int | None = None,
         variance_reduction: str | None = None,
         mu: float | None = None,
+        z_extern: np.ndarray | None = None,
     ) -> np.ndarray:
         """``mu`` overrides ``params.mu`` when given — pricing passes r - q,
         which the compensator below turns into the risk-neutral drift
         r - q - lambda_j * k for the diffusion part.
+
+        ``z_extern`` replaces the diffusion normals only. The Poisson counts
+        and jump sizes keep coming from ``seed``'s Generator, so both
+        arguments stay meaningful at once: correlated diffusion across assets,
+        reproducible jumps within each.
         """
         self._validate_inputs(S0, n_simulations)
         n_steps = resolve_n_steps(T, dt)
         self._validate_jump_intensity(params.lambda_j, dt)
+        self._validate_z_extern(z_extern, variance_reduction, n_simulations, n_steps)
         rng = make_rng(seed)
 
         shape = (n_simulations, n_steps)
-        z = generate_samples(rng, shape, variance_reduction)
+        if z_extern is not None:
+            z = z_extern
+        else:
+            z = generate_samples(rng, shape, variance_reduction)
 
         # Expected proportional jump size E[e^J - 1] for J ~ N(mu_j, sigma_j**2).
         k = np.expm1(params.mu_j + 0.5 * params.sigma_j**2)

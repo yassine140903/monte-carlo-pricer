@@ -25,15 +25,25 @@ class GBMSimulator(SimulatorBase):
         seed: int | None = None,
         variance_reduction: str | None = None,
         mu: float | None = None,
+        z_extern: np.ndarray | None = None,
     ) -> np.ndarray:
         """``mu`` overrides ``params.mu`` when given — pricing passes r - q to
         move from the calibrated real-world drift to the risk-neutral one.
+
+        ``z_extern`` supplies the standard normals instead of drawing them,
+        which leaves ``seed`` with nothing to do: the Brownian shocks are the
+        whole of GBM's randomness.
         """
         self._validate_inputs(S0, n_simulations)
         n_steps = resolve_n_steps(T, dt)
-        rng = make_rng(seed)
+        self._validate_z_extern(z_extern, variance_reduction, n_simulations, n_steps)
 
-        z = generate_samples(rng, (n_simulations, n_steps), variance_reduction)
+        if z_extern is not None:
+            z = z_extern
+        else:
+            z = generate_samples(
+                make_rng(seed), (n_simulations, n_steps), variance_reduction
+            )
 
         effective_mu = mu if mu is not None else params.mu
         drift = (effective_mu - 0.5 * params.sigma**2) * dt

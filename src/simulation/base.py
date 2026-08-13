@@ -25,6 +25,7 @@ class SimulatorBase(ABC):
         n_simulations: int,
         seed: int | None = None,
         variance_reduction: str | None = None,
+        z_extern: np.ndarray | None = None,
     ) -> np.ndarray:
         """Simulate price paths under the model's dynamics.
 
@@ -37,11 +38,19 @@ class SimulatorBase(ABC):
             n_simulations: Number of paths.
             seed: Seed for this call's Generator; None draws from OS entropy.
             variance_reduction: "antithetic", "stratified" or None.
+            z_extern: Externally supplied standard normals of shape
+                (n_simulations, n_steps) driving the price process, in place
+                of the ones this call would have drawn itself. This is how
+                src/risk/portfolio.py injects Cholesky-correlated normals to
+                simulate several assets under one correlation structure.
+                Mutually exclusive with ``variance_reduction``, which is the
+                other way of controlling those same draws.
 
         Subclasses also accept a ``mu`` keyword that overrides the drift
         carried in ``params`` (HestonParams has none, so there it is simply
         the drift, defaulting to 0). Pricing code passes r - q to switch from
-        the calibrated real-world measure to the risk-neutral one.
+        the calibrated real-world measure to the risk-neutral one. ``mu`` and
+        ``z_extern`` are independent and may be combined.
 
         Returns:
             Array of shape (n_simulations, n_steps+1) where
@@ -54,6 +63,35 @@ class SimulatorBase(ABC):
             raise ValueError("S0 must be positive")
         if n_simulations < 1:
             raise ValueError("n_simulations must be at least 1")
+
+    @staticmethod
+    def _validate_z_extern(
+        z_extern: np.ndarray | None,
+        variance_reduction: str | None,
+        n_simulations: int,
+        n_steps: int,
+    ) -> None:
+        """Reject externally supplied normals that clash with the call.
+
+        Passing both ``z_extern`` and ``variance_reduction`` is a programming
+        error rather than a preference to resolve: each is a complete recipe
+        for the driving normals, so honouring one would silently discard the
+        other.
+        """
+        if z_extern is None:
+            return
+
+        if variance_reduction is not None:
+            raise ValueError(
+                "Cannot use z_extern with variance_reduction — they both control "
+                "the random normals"
+            )
+
+        expected = (n_simulations, n_steps)
+        if z_extern.shape != expected:
+            raise ValueError(
+                f"z_extern must have shape {expected}, got {z_extern.shape}"
+            )
 
     @staticmethod
     def _paths_from_log_increments(S0: float, log_increments: np.ndarray) -> np.ndarray:
