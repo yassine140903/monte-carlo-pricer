@@ -2,13 +2,13 @@
 
 Monte Carlo derivatives pricing engine: historical data ingestion, model
 calibration, GPU/CPU simulation, pricing, and risk analytics, served behind a
-FastAPI backend.
+FastAPI backend with a React dashboard on top.
 
 ## Status
 
-**M1–M6** are implemented: data ingestion, model calibration, path simulation,
-option pricing, risk analytics, and the FastAPI backend that serves them. The
-frontend is still scaffolding.
+**M1–M7** are implemented: data ingestion, model calibration, path simulation,
+option pricing, risk analytics, the FastAPI backend that serves them, and the
+React dashboard that drives it.
 
 ## Project layout
 
@@ -25,7 +25,7 @@ src/
   risk/                    VaR/CVaR, correlated portfolios, stress scenarios
   api/                       FastAPI app + routers
 tests/
-frontend/              (later milestone)
+frontend/              Vite + React dashboard (see below)
 mlflow/                 local MLflow artifact/tracking scratch space
 ```
 
@@ -101,6 +101,32 @@ Two things worth knowing about the contract:
 Requests are capped at 100,000 simulated paths; over that the API answers
 `413` rather than trying. MLflow logging is best-effort — if the tracking
 server is unreachable the response still returns, with `mlflow_run_id: null`.
+
+## Running the dashboard
+
+```
+cd frontend
+npm install
+npm run dev
+```
+
+Opens on `http://localhost:3000` and talks to the API at
+`http://localhost:8000` (hardcoded in `src/api/client.js`). Vite + React with
+Tailwind v4, Recharts and axios; no state library, just hooks and one context.
+
+Four tabs, in workflow order:
+
+| Tab | What it does |
+| --- | --- |
+| **Calibrate** | Pick a stored ticker, fit all three models in parallel, see params and goodness of fit side by side |
+| **Simulate & Price** | Confidence cone under the physical measure, then price any of the eight payoffs on the same process under the risk-neutral one |
+| **Risk** | Single-asset VaR/CVaR/drawdown with optional stress scenario, or a correlated multi-asset portfolio |
+| **Runs** | MLflow experiments and run counts, linking out to the MLflow UI |
+
+Whatever calibrates flows through `AppContext` to the other tabs, so the
+Simulate and Risk pages start from the fitted params rather than hand-set ones
+— they stay editable either way. The database must already hold history for a
+ticker before it appears; ingest it with `src/data/fetcher.py` first.
 
 ## Tests
 

@@ -65,14 +65,24 @@ def _to_response(metrics: RiskMetrics) -> RiskMetricsResponse:
 
 @router.post("/metrics", response_model=RiskMetricsResponse)
 async def risk_metrics(request: RiskMetricsRequest) -> RiskMetricsResponse:
-    """Single-asset VaR, CVaR, drawdown, Sharpe and probability of loss."""
+    """Single-asset VaR, CVaR, drawdown, Sharpe and probability of loss.
+
+    Pass a scenario to get the stressed version of the same run: seed the two
+    calls identically and the difference between them is the shock alone, not
+    Monte Carlo noise.
+    """
     enforce_simulation_budget(request.n_simulations)
 
-    simulator = get_simulator(request.model_params.model_type)
+    params = request.model_params
+    scenario = _resolve_scenario(request, params.model_type)
+    if scenario is not None:
+        params = apply_scenario(params, scenario)
+
+    simulator = get_simulator(params.model_type)
     paths = await asyncio.to_thread(
         simulator.simulate,
         request.S0,
-        request.model_params,
+        params,
         request.T,
         request.dt,
         request.n_simulations,
@@ -116,17 +126,20 @@ def _aligned_returns(
 
 
 def _resolve_scenario(
-    request: PortfolioRiskRequest, model_type: str
+    request: RiskMetricsRequest | PortfolioRiskRequest, model_type: str
 ) -> Scenario | None:
-    """The scenario to apply to one asset, given its model family."""
+    """The scenario to apply to one set of params, given its model family.
+
+    A scenario names parameters, so it is model-specific: the preset lookup
+    needs to know which family it is being applied to, and a custom shock
+    naming ``v0`` will be rejected for a GBM asset by apply_scenario. That
+    rejection is the honest outcome — the alternative is silently stressing
+    only part of a mixed portfolio.
+    """
     if request.scenario is not None and request.custom_scenario is not None:
         raise ValueError("Pass either 'scenario' or 'custom_scenario', not both")
 
     if request.custom_scenario is not None:
-        # One custom shock for the whole basket: it names parameters, so a
-        # basket mixing model families will be rejected by apply_scenario for
-        # the assets that do not carry them. That is the honest outcome — the
-        # alternative is silently stressing only some of the portfolio.
         return Scenario(**request.custom_scenario)
 
     if request.scenario is not None:

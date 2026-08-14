@@ -108,6 +108,59 @@ class TestSingleAssetMetrics:
 
         assert response.status_code == 200
 
+    def test_a_preset_scenario_widens_the_loss_tail(self, client):
+        """Same seed either side, so the gap is the shock and not noise."""
+        baseline = client.post("/risk/metrics", json=metrics_body()).json()
+        stressed = client.post(
+            "/risk/metrics", json=metrics_body(scenario="vol_spike")
+        ).json()
+
+        assert stressed["var"]["95"] < baseline["var"]["95"]
+        assert stressed["cvar"]["99"] < baseline["cvar"]["99"]
+
+    def test_a_custom_scenario_is_applied(self, client):
+        baseline = client.post("/risk/metrics", json=metrics_body()).json()
+        stressed = client.post(
+            "/risk/metrics",
+            json=metrics_body(
+                custom_scenario={
+                    "name": "Vol Doubling",
+                    "description": "",
+                    "multipliers": {"sigma": 2.0},
+                }
+            ),
+        ).json()
+
+        assert stressed["max_drawdown"]["mean"] > baseline["max_drawdown"]["mean"]
+
+    def test_a_scenario_variant_is_picked_per_model_family(self, client):
+        """vol_spike names sigma for GBM and v0/theta/xi for Heston; the
+        request carries neither, the preset lookup resolves it."""
+        response = client.post(
+            "/risk/metrics",
+            json=metrics_body(model_params=HESTON_PARAMS, scenario="vol_spike"),
+        )
+
+        assert response.status_code == 200
+
+    def test_an_unknown_scenario_is_404(self, client):
+        response = client.post(
+            "/risk/metrics", json=metrics_body(scenario="alien_invasion")
+        )
+
+        assert response.status_code == 404
+
+    def test_both_scenario_kinds_at_once_is_422(self, client):
+        response = client.post(
+            "/risk/metrics",
+            json=metrics_body(
+                scenario="vol_spike",
+                custom_scenario={"name": "x", "description": "", "multipliers": {"sigma": 2.0}},
+            ),
+        )
+
+        assert response.status_code == 422
+
     def test_a_confidence_level_outside_the_unit_interval_is_422(self, client):
         response = client.post("/risk/metrics", json=metrics_body(confidence_levels=[1.5]))
 

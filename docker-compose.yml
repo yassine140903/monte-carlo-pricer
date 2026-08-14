@@ -56,7 +56,6 @@ services:
       - "3000:3000"
     depends_on:
       - backend
-    # Stub: frontend app lands in a later milestone.
 
 volumes:
   postgres-data:

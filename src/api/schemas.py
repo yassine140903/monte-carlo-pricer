@@ -125,6 +125,11 @@ class PriceOptionRequest(BaseModel):
 class RiskMetricsRequest(BaseModel):
     """``r`` is the Sharpe benchmark only — the paths themselves are simulated
     under the physical measure, using the drift in ``model_params``.
+
+    ``scenario`` / ``custom_scenario`` stress the params before simulating, the
+    same way PortfolioRiskRequest does. Applying the shock server-side keeps
+    apply_scenario the single definition of what a scenario means; a client
+    that stressed its own params would be a second, drifting copy of it.
     """
 
     S0: float = Field(gt=0)
@@ -133,6 +138,8 @@ class RiskMetricsRequest(BaseModel):
     dt: float = Field(default=DEFAULT_DT, gt=0)
     n_simulations: int = Field(default=10_000, gt=0)
     confidence_levels: list[float] = Field(default_factory=lambda: list(DEFAULT_CONFIDENCE_LEVELS))
+    scenario: str | None = None
+    custom_scenario: dict | None = None
     r: float = 0.0
     seed: int | None = None
     variance_reduction: VarianceReduction | None = None

@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+/* Tailwind v4 keeps the theme in CSS. These names become utilities directly:
+   --color-surface -> bg-surface, text-surface, border-surface. */
+@theme {
+  --color-base: #0f1117;
+  --color-surface: #1a1d27;
+  --color-surface-2: #222634;
+  --color-edge: #2c3040;
+  --color-ink: #e6e8ef;
+  --color-ink-dim: #98a0b3;
+  --color-ink-faint: #646c80;
+
+  --color-accent: #38bdf8;
+  --color-accent-dim: #0ea5e9;
+  --color-good: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+
+  /* One hue ramp for the confidence cone: outer bands sit further from the
+     median, so they read as lighter and less certain. */
+  --color-band-outer: #1d4ed8;
+  --color-band-mid: #3b82f6;
+  --color-band-core: #60a5fa;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-base);
+  color: var(--color-ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numeric readouts line up column-wise only with tabular figures — without
+   this, a table of Greeks jitters as values change. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-base);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-edge);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-faint);
+}
+
+/* Chrome renders number spinners inside our dark inputs as a light block. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
