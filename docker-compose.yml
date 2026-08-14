@@ -47,7 +47,6 @@ services:
         condition: service_healthy
       mlflow:
         condition: service_started
-    # Stub: FastAPI app lands in a later milestone.
 
   frontend:
     build:

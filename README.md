@@ -6,10 +6,9 @@ FastAPI backend.
 
 ## Status
 
-**M1 — Data Ingestion** is implemented: fetching daily OHLCV bars from
-Yahoo Finance and persisting them to Postgres. Calibration, simulation,
-pricing, risk, and the API/frontend layers are scaffolded but not yet
-implemented.
+**M1–M6** are implemented: data ingestion, model calibration, path simulation,
+option pricing, risk analytics, and the FastAPI backend that serves them. The
+frontend is still scaffolding.
 
 ## Project layout
 
@@ -20,15 +19,19 @@ src/
     fetcher.py        yfinance wrapper, incremental fetch strategy
     storage.py         Postgres access (SQLAlchemy Core)
     models.py           StockData / TickerMetadata schemas
-  calibration/        (M2)
-  simulation/          (M3)
-  pricing/               (M4)
-  risk/                    (M5)
-  api/                       FastAPI app + routers (later milestone)
+  calibration/        GBM, Merton jump-diffusion, Heston fitting
+  simulation/          path engines + variance reduction
+  pricing/               Monte Carlo pricing, payoffs, Black-Scholes, Greeks
+  risk/                    VaR/CVaR, correlated portfolios, stress scenarios
+  api/                       FastAPI app + routers
 tests/
 frontend/              (later milestone)
 mlflow/                 local MLflow artifact/tracking scratch space
 ```
+
+Everything under `src/calibration`, `src/simulation`, `src/pricing` and
+`src/risk` is pure NumPy/SciPy: no pandas, no MLflow, no I/O. `src/api` is the
+only layer that talks to the database or the tracking server.
 
 ## Setup
 
@@ -64,6 +67,40 @@ save_ohlcv(rows)
 `fetch_ohlcv` only requests data after the latest date already stored for a
 ticker (falling back to `DEFAULT_LOOKBACK_YEARS` of history on first fetch),
 and returns split/dividend-adjusted prices (`auto_adjust=True`).
+
+## Running the API
+
+```
+uvicorn src.api.main:app --reload
+```
+
+Interactive docs at `http://localhost:8000/docs`.
+
+| Endpoint | What it does |
+| --- | --- |
+| `GET /health` | Liveness check |
+| `GET /data/tickers` | Tickers held in storage, with date ranges |
+| `GET /data/{ticker}` | Stored OHLCV bars, optionally date-bounded |
+| `POST /calibrate` | Fit GBM / jump-diffusion / Heston to stored prices |
+| `POST /simulate` | Path fan chart under the **physical** measure |
+| `POST /price-option` | Monte Carlo price + Greeks under the **risk-neutral** measure |
+| `POST /risk/metrics` | Single-asset VaR, CVaR, drawdown, Sharpe |
+| `POST /risk/portfolio` | Correlated multi-asset risk, optionally stressed |
+| `GET /risk/scenarios` | Available preset stress scenarios |
+| `GET /mlflow/experiments` | Experiments logged to the tracking server |
+
+Two things worth knowing about the contract:
+
+- **Measure.** `/simulate` and the `/risk/*` endpoints keep the calibrated
+  real-world drift; `/price-option` overrides it with `r - q`. Comparing a
+  simulated mean against an option price will not line up, by design.
+- **Sign.** VaR and CVaR come back as raw P&L quantiles, so a loss is
+  *negative*. Flip the sign in the presentation layer if a report wants the
+  usual positive figure.
+
+Requests are capped at 100,000 simulated paths; over that the API answers
+`413` rather than trying. MLflow logging is best-effort — if the tracking
+server is unreachable the response still returns, with `mlflow_run_id: null`.
 
 ## Tests
 

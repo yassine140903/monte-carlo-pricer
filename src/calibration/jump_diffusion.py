@@ -13,6 +13,8 @@ simulators in src/simulation/ expect.
 """
 from __future__ import annotations
 
+from typing import Literal
+
 import numpy as np
 from pydantic import BaseModel
 from scipy.optimize import minimize
@@ -26,8 +28,11 @@ from src.calibration.utils import log_returns
 class JumpDiffusionParams(BaseModel):
     """Merton params. ``mu`` is the price-level drift (expected return of S),
     matching GBMParams — not the log-return drift.
+
+    ``model_type`` is the discriminator tag described on GBMParams.
     """
 
+    model_type: Literal["jump_diffusion"] = "jump_diffusion"
     mu: float
     sigma: float
     lambda_j: float

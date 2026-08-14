@@ -37,7 +37,10 @@ class CalibratorBase(ABC):
         std = np.std(residuals, ddof=1)
         log_likelihood = float(np.sum(stats.norm.logpdf(residuals, loc=mean, scale=std)))
 
-        k = len(type(self.params).model_fields)
+        # ``model_type`` is a constant discriminator tag the API layer relies
+        # on, not something the fit estimated, so it must not add to the AIC/BIC
+        # parameter penalty.
+        k = sum(1 for name in type(self.params).model_fields if name != "model_type")
         n = len(residuals)
 
         aic = 2 * k - 2 * log_likelihood

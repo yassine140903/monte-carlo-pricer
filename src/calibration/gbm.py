@@ -1,6 +1,8 @@
 """Geometric Brownian Motion calibration from log returns."""
 from __future__ import annotations
 
+from typing import Literal
+
 import numpy as np
 from pydantic import BaseModel
 
@@ -9,6 +11,12 @@ from src.calibration.utils import annualize_mean, annualize_volatility, log_retu
 
 
 class GBMParams(BaseModel):
+    """``model_type`` is a constant tag, not a fitted parameter: it lets the API
+    layer treat the three params models as a discriminated union. It defaults,
+    so nothing that constructed these params before needs to know about it.
+    """
+
+    model_type: Literal["gbm"] = "gbm"
     mu: float
     sigma: float
 

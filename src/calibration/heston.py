@@ -3,6 +3,8 @@ volatility term structure against the model's expected-variance curve.
 """
 from __future__ import annotations
 
+from typing import Literal
+
 import numpy as np
 from pydantic import BaseModel
 from scipy.optimize import minimize
@@ -14,6 +16,9 @@ _HORIZONS_DAYS = (5, 21, 63, 126, 252)
 
 
 class HestonParams(BaseModel):
+    """``model_type`` is the discriminator tag described on GBMParams."""
+
+    model_type: Literal["heston"] = "heston"
     kappa: float
     theta: float
     xi: float
