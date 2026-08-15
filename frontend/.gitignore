@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local dev API base URL; see frontend/.env.example
+.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1,6 +1,10 @@
 import axios from "axios";
 
-export const API_BASE_URL = "http://localhost:8000";
+// Outside Docker the dev server has no proxy, so frontend/.env points this at
+// the backend directly. In the Docker image no VITE_ vars are baked in, and
+// the relative "/api" falls through to Nginx, which strips the prefix and
+// forwards to backend:8000 — same-origin, so no CORS and no build-time host.
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 export const MLFLOW_UI_URL = "http://localhost:5000";
 
 const api = axios.create({

@@ -1,0 +1,23 @@
+node_modules
+dist
+dist-ssr
+
+# Local dev config only: the image must fall back to the relative "/api" so
+# requests go through Nginx, not to a hardcoded localhost.
+.env
+.env.*
+*.local
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.vscode
+.idea
+.DS_Store

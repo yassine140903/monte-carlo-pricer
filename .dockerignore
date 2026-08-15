@@ -1,0 +1,39 @@
+.git
+.gitignore
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+tests/
+
+# Runtime state, not build input: MLflow keeps its own volume in Docker.
+mlruns/
+mlflow/
+checkpoints/
+
+# The image reads its settings from the compose environment, never from a
+# developer's local .env (which points at localhost).
+.env
+
+frontend/
+node_modules/
+
+Dockerfile
+.dockerignore
+docker-compose.yml
+README.md
+
+.vscode/
+.idea/
+.DS_Store
+.claude/
+*.log
